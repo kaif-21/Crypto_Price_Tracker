@@ -126,7 +126,7 @@ if choice == "Crypto Tracker":
                 st.error("Crypto price data not found.")
 
         elif response.status_code == 429:
-            st.warning("CoinGecko API rate limit exceeded. Thodi der baad try karo.")
+            st.warning("CoinGecko API rate limit exceeded. Please try again later.")
 
         else:
             st.error(f"Price API error: {response.status_code}")
