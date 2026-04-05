@@ -23,46 +23,58 @@ choice = st.sidebar.selectbox("Go to", menu)
 # -------------------------------
 # CACHE FUNCTIONS
 # -------------------------------
+
+# ✅ Get ONLY price (NOT response object)
 @st.cache_data(ttl=60)
 def get_crypto_price(coin):
-    url = "https://api.coingecko.com/api/v3/simple/price"
-    params = {
-        "ids": coin,
-        "vs_currencies": "usd"
-    }
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price"
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=15,
-        headers={"accept": "application/json"}
-    )
+        params = {
+            "ids": coin,
+            "vs_currencies": "usd"
+        }
 
-    return response
+        response = requests.get(url, params=params, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            if coin in data:
+                return data[coin]["usd"]
+
+        return None
+
+    except Exception as e:
+        print("ERROR:", e)
+        return None
 
 
+# ✅ Chart API (returns response)
 @st.cache_data(ttl=120)
 def get_chart_data(coin):
-    chart_url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart"
-    params = {
-        "vs_currency": "usd",
-        "days": "7"
-    }
+    try:
+        chart_url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart"
 
-    response = requests.get(
-        chart_url,
-        params=params,
-        timeout=15,
-        headers={"accept": "application/json"}
-    )
+        params = {
+            "vs_currency": "usd",
+            "days": "7"
+        }
 
-    return response
+        response = requests.get(chart_url, params=params, timeout=15)
+
+        return response
+
+    except Exception as e:
+        print("Chart Error:", e)
+        return None
 
 
 # -------------------------------
-# CRYPTO TRACKER
+# CRYPTO TRACKER PAGE
 # -------------------------------
 if choice == "Crypto Tracker":
+
     st.title("Crypto Price Tracker")
     st.write("Track live crypto prices and view the last 7 days price chart.")
 
@@ -71,73 +83,58 @@ if choice == "Crypto Tracker":
         ["bitcoin", "ethereum", "dogecoin"]
     )
 
-    try:
-        response = get_crypto_price(coin)
+    # ---------------- PRICE ----------------
+    price = get_crypto_price(coin)
 
-        if response.status_code == 200:
-            data = response.json()
+    if price is not None:
 
-            if coin in data and "usd" in data[coin]:
-                price = data[coin]["usd"]
-                st.metric("Current Price (USD)", f"${price:,}")
+        st.metric("Current Price (USD)", f"${price:,.2f}")
 
-                st.subheader(f"{coin.upper()} - 7 Day Price Chart")
+        st.subheader(f"{coin.upper()} - 7 Day Price Chart")
 
-                try:
-                    chart_response = get_chart_data(coin)
+        # ---------------- CHART ----------------
+        chart_response = get_chart_data(coin)
 
-                    if chart_response.status_code == 200:
-                        chart_data = chart_response.json()
+        if chart_response and chart_response.status_code == 200:
 
-                        if "prices" in chart_data and chart_data["prices"]:
-                            prices = chart_data["prices"]
+            chart_data = chart_response.json()
 
-                            df = pd.DataFrame(prices, columns=["timestamp", "price"])
-                            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            if "prices" in chart_data and chart_data["prices"]:
 
-                            fig = px.line(
-                                df,
-                                x="timestamp",
-                                y="price",
-                                title=f"{coin.upper()} Price Chart (Last 7 Days)"
-                            )
+                prices = chart_data["prices"]
 
-                            fig.update_layout(
-                                xaxis_title="Date",
-                                yaxis_title="Price (USD)"
-                            )
+                df = pd.DataFrame(prices, columns=["timestamp", "price"])
+                df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
 
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.warning("Chart data is not available right now.")
+                fig = px.line(
+                    df,
+                    x="timestamp",
+                    y="price",
+                    title=f"{coin.upper()} Price Chart (Last 7 Days)"
+                )
 
-                    elif chart_response.status_code == 429:
-                        st.warning("Chart temporarily unavailable because API rate limit exceeded. Please try again later.")
+                fig.update_layout(
+                    xaxis_title="Date",
+                    yaxis_title="Price (USD)"
+                )
 
-                    else:
-                        st.error(f"Chart API error: {chart_response.status_code}")
-
-                except requests.exceptions.RequestException:
-                    st.error("Network issue while loading chart data.")
-                except ValueError:
-                    st.error("Invalid response received from chart API.")
+                st.plotly_chart(fig, use_container_width=True)
 
             else:
-                st.error("Crypto price data not found.")
+                st.warning("Chart data not available.")
 
-        elif response.status_code == 429:
-            st.warning("CoinGecko API rate limit exceeded. Please try again later.")
+        elif chart_response and chart_response.status_code == 429:
+            st.warning("API rate limit exceeded. Try again later.")
 
         else:
-            st.error(f"Price API error: {response.status_code}")
+            st.error("Failed to load chart data.")
 
-    except requests.exceptions.RequestException:
-        st.error("Network issue while loading crypto price.")
-    except ValueError:
-        st.error("Invalid response received from price API.")
+    else:
+        st.error("Failed to fetch crypto price.")
+
 
 # -------------------------------
-# PORTFOLIO DASHBOARD
+# PORTFOLIO DASHBOARD PAGE
 # -------------------------------
 elif choice == "Portfolio Dashboard":
     crypto_portfolio_dashboard.run()
